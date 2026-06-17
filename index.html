@@ -1,0 +1,782 @@
+Voici le code amélioré, je veux améliorer son affichage , et remplacer les popups par des éléments internes 
+
+Ne change rien au code sauf cela 
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vibe-Sync Satellites Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0d0e12;
+            color: #e4e6eb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .neon-border-active {
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+            border-color: #ef4444 !important;
+        }
+        .satellite-row {
+            background: #16181f;
+            border: 1px solid #2a2e3d;
+            transition: all 0.2s ease, transform 0.1s ease;
+        }
+        .satellite-row.dragging {
+            opacity: 0.4;
+            transform: scale(0.98);
+            background: #1f2330;
+            border-style: dashed;
+        }
+        .drag-handle {
+            cursor: grab;
+        }
+        .drag-handle:active {
+            cursor: grabbing;
+        }
+        .led {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .led-green { background-color: #10b981; box-shadow: 0 0 8px #10b981; }
+        .led-red { background-color: #ef4444; box-shadow: 0 0 8px #ef4444; }
+        .preview-zone {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.25s ease-out;
+        }
+        .preview-zone.open {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        #project-select {
+            background-color: #1e2128;
+            border: 1px solid #2a2e3d;
+            border-radius: 20px;
+            padding: 4px 12px 4px 16px;
+            font-size: 0.8rem;
+            color: #e4e6eb;
+            outline: none;
+            max-width: 140px;
+            cursor: pointer;
+        }
+        #project-select:focus {
+            border-color: #6366f1;
+        }
+        .project-btn {
+            background: transparent;
+            border: none;
+            color: #9ca3af;
+            font-size: 1rem;
+            padding: 0 6px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .project-btn:hover {
+            color: #e4e6eb;
+        }
+        .project-btn.danger:hover {
+            color: #ef4444;
+        }
+        .file-input-hidden {
+            position: absolute;
+            width: 0.1px;
+            height: 0.1px;
+            opacity: 0;
+            overflow: hidden;
+            z-index: -1;
+        }
+        .footer-select {
+            background: #1e2128;
+            border: 1px solid #2a2e3d;
+            border-radius: 20px;
+            padding: 6px 12px;
+            font-size: 0.75rem;
+            color: #e4e6eb;
+            outline: none;
+            cursor: pointer;
+        }
+        .footer-select:focus {
+            border-color: #6366f1;
+        }
+    </style>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4b6cb7">
+<link rel="apple-touch-icon" href="icon.png"></head>
+<body class="min-h-screen p-4 flex flex-col justify-between max-w-md mx-auto relative select-none">
+
+    <header class="flex flex-col gap-2 mb-4 pt-2">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <h1 class="text-xl font-bold tracking-tight text-zinc-200">VibeSync</h1>
+                <button id="btn-undo" class="opacity-40 hover:opacity-100 transition-all text-xs bg-zinc-800 text-zinc-400 px-2 py-1 rounded border border-zinc-700 font-mono" title="Annuler la dernière action">↶ Undo</button>
+            </div>
+            <button id="toggle-edit" class="px-4 py-2 rounded-full font-medium text-xs tracking-wider uppercase transition-all bg-zinc-800 text-zinc-400 border border-zinc-700">
+                Édition OFF
+            </button>
+        </div>
+        <div class="flex items-center gap-1 bg-[#16181f] border border-zinc-800 rounded-full px-2 py-1.5">
+            <select id="project-select" class="flex-1 min-w-0"></select>
+            <button id="new-project-btn" class="project-btn" title="Nouveau projet">➕</button>
+            <button id="rename-project-btn" class="project-btn" title="Renommer le projet">✏️</button>
+            <button id="delete-project-btn" class="project-btn danger" title="Supprimer ce projet">🗑</button>
+            <span class="w-px h-5 bg-zinc-700 mx-1"></span>
+            <button id="import-project-btn" class="project-btn text-xs font-medium bg-zinc-800 px-3 py-0.5 rounded-full hover:bg-zinc-700" title="Importer un fichier .html">📂 Importer</button>
+            <input type="file" id="import-file-input" class="file-input-hidden" accept=".html,.htm">
+        </div>
+    </header>
+
+    <main class="flex-1">
+        <div id="satellite-column" class="flex flex-col gap-3">
+            </div>
+    </main>
+
+    <footer class="mt-8 mb-2 space-y-3">
+        <div class="flex items-center gap-3 justify-between">
+            <label for="output-format" class="text-xs text-zinc-400 font-medium">Format de sortie :</label>
+            <select id="output-format" class="footer-select flex-1 max-w-[180px]">
+                <option value="raw">Code brut (sans structure)</option>
+                <option value="full" selected>Page HTML complète (avec CDN)</option>
+            </select>
+        </div>
+        <button id="run-preview" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-emerald-600/20 text-sm tracking-wide flex items-center justify-center gap-2">
+            <span>⚡ Visualiser le Monolithe (Live)</span>
+        </button>
+        <button id="assemble-all" class="w-full bg-indigo-600 text-white font-medium py-2.5 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-indigo-600/20 text-xs tracking-wide">
+            Rassembler & Copier le Projet COMPLET
+        </button>
+        <button id="download-all" class="w-full bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 font-medium py-2 rounded-xl transition-all active:scale-[0.98] text-[11px] tracking-wide">
+            💾 Télécharger le fichier .html
+        </button>
+    </footer>
+
+    <div id="preview-panel" class="fixed inset-0 bg-black/95 z-50 flex flex-col hidden">
+        <div class="flex items-center justify-between p-4 bg-zinc-900 border-b border-zinc-800">
+            <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="text-xs font-mono font-medium text-zinc-400">Live Render Sandbox</span>
+            </div>
+            <button id="close-preview" class="px-3 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold transition-all">
+                Fermer ✕
+            </button>
+        </div>
+        <div class="flex-1 bg-white relative">
+            <iframe id="preview-frame" class="w-full h-full border-none bg-white"></iframe>
+        </div>
+    </div>
+
+    <div id="modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+        <div class="bg-[#16181f] border border-zinc-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl">
+            <h3 id="modal-title" class="text-lg font-bold text-zinc-100 mb-4">Nouveau Satellite</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Titre du satellite</label>
+                    <input type="text" id="sat-title" placeholder="ex: AuthModule, Editor..." class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100 focus:outline-none focus:border-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-1">Code source</label>
+                    <textarea id="sat-code" placeholder="Collez le code ici..." rows="8" class="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500 resize-none"></textarea>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button id="close-modal" class="flex-1 bg-zinc-800 text-zinc-400 py-2 rounded-lg text-sm font-medium hover:bg-zinc-700">
+                        Annuler
+                    </button>
+                    <button id="submit-modal" class="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-500">
+                        Valider
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="fixed bottom-36 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-full text-xs font-medium tracking-wide shadow-xl z-50 border whitespace-nowrap transition-all duration-200 opacity-0 pointer-events-none bg-zinc-900 border-zinc-700 text-zinc-200">
+        Notification
+    </div>
+
+    <script>
+        // =============== GESTION MULTI-PROJETS ===============
+        const STORAGE_PROJECTS_KEY = 'vibe_projects_list';
+        const STORAGE_CURRENT_KEY = 'vibe_current_project';
+        const SAT_PREFIX = 'vibe_satellites_';
+
+        let currentProject = '';
+        let projects = [];
+
+        function loadProjects() {
+            try {
+                const data = localStorage.getItem(STORAGE_PROJECTS_KEY);
+                projects = data ? JSON.parse(data) : [];
+            } catch (e) { projects = []; }
+            if (!projects.length) {
+                projects = ['Projet principal'];
+                localStorage.setItem(STORAGE_PROJECTS_KEY, JSON.stringify(projects));
+            }
+            currentProject = localStorage.getItem(STORAGE_CURRENT_KEY) || projects[0];
+            if (!projects.includes(currentProject)) {
+                currentProject = projects[0];
+            }
+            return projects;
+        }
+
+        function saveProjects() {
+            localStorage.setItem(STORAGE_PROJECTS_KEY, JSON.stringify(projects));
+            localStorage.setItem(STORAGE_CURRENT_KEY, currentProject);
+        }
+
+        function loadSatellites(projectName) {
+            try {
+                const data = localStorage.getItem(SAT_PREFIX + projectName);
+                return data ? JSON.parse(data) : [];
+            } catch (e) { return []; }
+        }
+
+        function saveSatellites(projectName, data) {
+            localStorage.setItem(SAT_PREFIX + projectName, JSON.stringify(data));
+        }
+
+        function switchProject(name) {
+            if (name === currentProject) return;
+            saveSatellites(currentProject, satellites);
+            currentProject = name;
+            localStorage.setItem(STORAGE_CURRENT_KEY, name);
+            satellites = loadSatellites(name);
+            historyStack = [];
+            if (undoBtn) undoBtn.classList.add('opacity-40');
+            render();
+            updateProjectSelect();
+            showNotification(`Projet chargé : ${name}`);
+        }
+
+        function updateProjectSelect() {
+            const select = document.getElementById('project-select');
+            if (!select) return;
+            const current = currentProject;
+            select.innerHTML = '';
+            projects.forEach(p => {
+                const opt = document.createElement('option');
+                opt.value = p;
+                opt.textContent = p;
+                if (p === current) opt.selected = true;
+                select.appendChild(opt);
+            });
+        }
+
+        function createProject() {
+            const name = prompt('Nom du nouveau projet :');
+            if (!name || name.trim() === '') return;
+            if (projects.includes(name.trim())) {
+                showNotification('Ce nom existe déjà', true);
+                return;
+            }
+            const newName = name.trim();
+            projects.push(newName);
+            saveProjects();
+            saveSatellites(newName, []);
+            switchProject(newName);
+        }
+
+        function renameProject() {
+            const newName = prompt('Nouveau nom pour ce projet :', currentProject);
+            if (!newName || newName.trim() === '') return;
+            const trimmed = newName.trim();
+            if (trimmed === currentProject) return;
+            if (projects.includes(trimmed)) {
+                showNotification('Ce nom existe déjà', true);
+                return;
+            }
+            const data = loadSatellites(currentProject);
+            localStorage.removeItem(SAT_PREFIX + currentProject);
+            const index = projects.indexOf(currentProject);
+            projects[index] = trimmed;
+            saveProjects();
+            saveSatellites(trimmed, data);
+            currentProject = trimmed;
+            localStorage.setItem(STORAGE_CURRENT_KEY, trimmed);
+            satellites = data;
+            historyStack = [];
+            if (undoBtn) undoBtn.classList.add('opacity-40');
+            render();
+            updateProjectSelect();
+            showNotification(`Projet renommé : ${trimmed}`);
+        }
+
+        function deleteProject() {
+            if (projects.length <= 1) {
+                showNotification('Vous devez garder au moins un projet', true);
+                return;
+            }
+            if (!confirm(`Supprimer définitivement le projet "${currentProject}" ?`)) return;
+            localStorage.removeItem(SAT_PREFIX + currentProject);
+            const index = projects.indexOf(currentProject);
+            projects.splice(index, 1);
+            saveProjects();
+            const newProject = projects[0];
+            switchProject(newProject);
+        }
+
+        // =============== FIN MULTI-PROJETS ===============
+
+        let isEditMode = false;
+        let satellites = [];
+        let historyStack = [];
+        let editingSatelliteId = null;
+
+        loadProjects();
+        satellites = loadSatellites(currentProject);
+
+        const column = document.getElementById('satellite-column');
+        const toggleEditBtn = document.getElementById('toggle-edit');
+        const modal = document.getElementById('modal');
+        const modalMainTitle = document.getElementById('modal-title');
+        const closeModalBtn = document.getElementById('close-modal');
+        const submitModalBtn = document.getElementById('submit-modal');
+        const satTitleInput = document.getElementById('sat-title');
+        const satCodeTxtarea = document.getElementById('sat-code');
+        const assembleAllBtn = document.getElementById('assemble-all');
+        const downloadAllBtn = document.getElementById('download-all');
+        const runPreviewBtn = document.getElementById('run-preview');
+        const previewPanel = document.getElementById('preview-panel');
+        const closePreviewBtn = document.getElementById('close-preview');
+        const previewFrame = document.getElementById('preview-frame');
+        const undoBtn = document.getElementById('btn-undo');
+        const notif = document.getElementById('notification');
+        const outputFormatSelect = document.getElementById('output-format');
+
+        document.getElementById('project-select').addEventListener('change', function(e) {
+            const selected = e.target.value;
+            if (selected && selected !== currentProject) {
+                switchProject(selected);
+            }
+        });
+        document.getElementById('new-project-btn').addEventListener('click', createProject);
+        document.getElementById('rename-project-btn').addEventListener('click', renameProject);
+        document.getElementById('delete-project-btn').addEventListener('click', deleteProject);
+
+        const importFileInput = document.getElementById('import-file-input');
+        document.getElementById('import-project-btn').addEventListener('click', () => {
+            importFileInput.click();
+        });
+        importFileInput.addEventListener('change', function(e) {
+            const file = this.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(ev) {
+                const content = ev.target.result;
+                const match = content.match(/<!--\s*SATELLITES_DATA:\s*(\[.*?\])\s*-->/s);
+                if (match) {
+                    try {
+                        const imported = JSON.parse(match[1]);
+                        if (!Array.isArray(imported) || imported.length === 0) {
+                            showNotification('Aucun satellite trouvé dans ce fichier', true);
+                            return;
+                        }
+                        if (confirm(`Importer ${imported.length} satellite(s) dans le projet "${currentProject}" ? (les satellites actuels seront remplacés)`)) {
+                            satellites = imported;
+                            saveSatellites(currentProject, satellites);
+                            historyStack = [];
+                            if (undoBtn) undoBtn.classList.add('opacity-40');
+                            render();
+                            showNotification(`Importé ${satellites.length} satellites depuis le fichier`);
+                        }
+                    } catch (err) {
+                        showNotification('Erreur de parsing du fichier', true);
+                    }
+                } else {
+                    if (confirm('Ce fichier ne contient pas de métadonnées. Voulez-vous créer un satellite avec tout le contenu ?')) {
+                        const title = file.name.replace(/\.[^.]+$/, '') || 'Importé';
+                        satellites.push({ id: Date.now().toString(), title, code: content });
+                        saveSatellites(currentProject, satellites);
+                        historyStack = [];
+                        if (undoBtn) undoBtn.classList.add('opacity-40');
+                        render();
+                        showNotification('Un satellite créé avec le contenu du fichier');
+                    }
+                }
+                importFileInput.value = '';
+            };
+            reader.readAsText(file);
+        });
+
+        function showNotification(message, isError = false) {
+            if (!notif) return;
+            notif.textContent = message;
+            if (isError) {
+                notif.className = "fixed bottom-36 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-full text-xs font-medium tracking-wide shadow-xl z-50 border whitespace-nowrap transition-all duration-200 bg-red-500/10 border-red-500/30 text-red-400 opacity-100";
+            } else {
+                notif.className = "fixed bottom-36 left-1/2 -translate-x-1/2 px-4 py-2.5 rounded-full text-xs font-medium tracking-wide shadow-xl z-50 border whitespace-nowrap transition-all duration-200 bg-zinc-900 border-zinc-700 text-zinc-200 opacity-100";
+            }
+            setTimeout(() => {
+                notif.classList.add('opacity-0', 'pointer-events-none');
+            }, 2500);
+        }
+
+        function save(pushToHistory = true) {
+            if (pushToHistory) {
+                historyStack.push(JSON.stringify(satellites));
+                if (historyStack.length > 5) historyStack.shift();
+                if (undoBtn) undoBtn.classList.remove('opacity-40');
+            }
+            saveSatellites(currentProject, satellites);
+        }
+
+        if (undoBtn) {
+            undoBtn.onclick = () => {
+                if (historyStack.length > 0) {
+                    const previousState = historyStack.pop();
+                    satellites = JSON.parse(previousState);
+                    saveSatellites(currentProject, satellites);
+                    render();
+                    showNotification("Action annulée ↶");
+                    if (historyStack.length === 0) undoBtn.classList.add('opacity-40');
+                } else {
+                    showNotification("Rien à annuler", true);
+                }
+            };
+        }
+
+        // ===== NOUVELLE FONCTION : construction d'une page HTML complète =====
+        function buildFullPage(code) {
+            // Détection des CDN déjà présents (approximation)
+            const hasReact = /<script[^>]*src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/react/i.test(code);
+            const hasFirebase = /<script[^>]*src=["']https:\/\/www\.gstatic\.com\/firebasejs/i.test(code);
+            const hasCrypto = /<script[^>]*src=["']https:\/\/cdnjs\.cloudflare\.com\/ajax\/libs\/crypto-js/i.test(code);
+            const hasXLSX = /<script[^>]*src=["']https:\/\/cdn\.sheetjs\.com/i.test(code);
+            const hasTailwind = /<script[^>]*src=["']https:\/\/cdn\.tailwindcss\.com/i.test(code);
+            const hasBabel = /<script[^>]*src=["']https:\/\/cdn\.jsdelivr\.net\/npm\/@babel\/standalone/i.test(code);
+
+            // Si tous sont déjà présents, on renvoie le code tel quel
+            if (hasReact && hasFirebase && hasCrypto && hasXLSX && hasTailwind && hasBabel) {
+                return code;
+            }
+
+            // Sinon, on construit un template complet
+            return `<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Monolithe VibeSync</title>
+    ${!hasTailwind ? '<script src="https://cdn.tailwindcss.com"><\/script>' : ''}
+    ${!hasCrypto ? '<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js"><\/script>' : ''}
+    ${!hasFirebase ? '<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"><\/script>\n<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"><\/script>' : ''}
+    ${!hasXLSX ? '<script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"><\/script>' : ''}
+    ${!hasReact ? '<script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.development.js"><\/script>\n<script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.development.js"><\/script>' : ''}
+    ${!hasBabel ? '<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"><\/script>' : ''}
+    <style>
+        /* Reset & scrollbar */
+        ::-webkit-scrollbar { display: none; }
+        body { background: #0f172a; margin: 0; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel" data-presets="react,env">
+        ${code}
+    <\/script>
+
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));}</script>
+</body>
+</html>`;
+        }
+
+        // ===== RASSEMBLER & COPIER =====
+        if (assembleAllBtn) {
+            assembleAllBtn.onclick = () => {
+                if (satellites.length === 0) {
+                    showNotification("Aucun satellite à assembler", true);
+                    return;
+                }
+                const raw = satellites.map(s => s.code).join('\n\n');
+                const format = outputFormatSelect ? outputFormatSelect.value : 'raw';
+                let output = raw;
+                if (format === 'full') {
+                    output = buildFullPage(raw);
+                }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(output)
+                        .then(() => showNotification(`Monolithe assemblé (${format === 'full' ? 'HTML complet' : 'brut'}) et copié !`))
+                        .catch(() => showNotification("Erreur de copie", true));
+                }
+            };
+        }
+
+        // ===== VISUALISER =====
+        if (runPreviewBtn) {
+            runPreviewBtn.onclick = () => {
+                if (satellites.length === 0) {
+                    showNotification("Aucun code à exécuter", true);
+                    return;
+                }
+                const raw = satellites.map(s => s.code).join('\n\n');
+                const format = outputFormatSelect ? outputFormatSelect.value : 'raw';
+                let output = raw;
+                if (format === 'full') {
+                    output = buildFullPage(raw);
+                }
+                const blob = new Blob([output], { type: 'text/html;charset=utf-8;' });
+                if (previewFrame) previewFrame.src = URL.createObjectURL(blob);
+                if (previewPanel) previewPanel.classList.remove('hidden');
+                showNotification(`Rendu en cours (${format === 'full' ? 'page complète' : 'brut'})`);
+            };
+        }
+
+        // ===== TÉLÉCHARGER =====
+        if (downloadAllBtn) {
+            downloadAllBtn.onclick = () => {
+                if (satellites.length === 0) {
+                    showNotification("Aucun code à exporter", true);
+                    return;
+                }
+                const bundle = satellites.map(s => s.code).join('\n\n');
+                const meta = satellites.map(({ id, title, code }) => ({ id, title, code }));
+                const metaStr = JSON.stringify(meta);
+                const format = outputFormatSelect ? outputFormatSelect.value : 'raw';
+                let finalContent;
+                if (format === 'full') {
+                    finalContent = buildFullPage(bundle);
+                } else {
+                    finalContent = `<!-- SATELLITES_DATA: ${metaStr} -->\n\n${bundle}`;
+                }
+                const blob = new Blob([finalContent], { type: 'text/html;charset=utf-8;' });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(blob);
+                link.setAttribute("download", format === 'full' ? "monolith_complete.html" : "monolith_raw.html");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showNotification(`Fichier .html téléchargé (${format === 'full' ? 'page complète' : 'brut avec métadonnées'}) !`);
+            };
+        }
+
+        // Le reste du code (render, gestion satellites, drag, etc.) reste strictement identique
+        function render() {
+            if (!column) return;
+            column.innerHTML = '';
+
+            satellites.forEach(sat => {
+                const el = document.createElement('div');
+                el.className = 'satellite-row rounded-xl p-3 flex flex-col gap-2 relative overflow-hidden';
+                el.setAttribute('draggable', isEditMode ? 'false' : 'true');
+                el.setAttribute('data-id', sat.id);
+
+                const linesCount = sat.code ? sat.code.split('\n').length : 0;
+                const hasCode = linesCount > 0 && sat.code.trim() !== "";
+                const ledClass = hasCode ? 'led-green' : 'led-red';
+
+                el.innerHTML = `
+                    <div class="flex items-center justify-between gap-4 w-full">
+                        <div onclick="event.stopPropagation(); openEditModal('${sat.id}')" class="drag-handle text-zinc-600 hover:text-zinc-400 text-lg pl-1 select-none">${isEditMode ? '⚙️' : '☰'}</div>
+                        
+                        <div onclick="togglePreview(this)" class="flex-1 flex flex-col text-left cursor-pointer select-none truncate pr-2">
+                            <div class="flex items-center gap-2">
+                                <span class="led ${ledClass} shrink-0"></span>
+                                <span class="text-sm font-semibold truncate text-zinc-300">${sat.title}</span>
+                            </div>
+                            <span class="text-[10px] font-mono text-zinc-500 pl-4">${linesCount} ligne${linesCount > 1 ? 's' : ''}</span>
+                        </div>
+                        
+                        <div class="flex gap-2 shrink-0">
+                            <button onclick="copySatellite('${sat.id}')" class="px-3 py-1.5 rounded-lg bg-zinc-800 text-[11px] font-bold text-emerald-400 hover:bg-zinc-700 active:scale-95 transition-all">Copier</button>
+                            <button onclick="pasteSatellite('${sat.id}')" class="px-3 py-1.5 rounded-lg bg-zinc-800 text-[11px] font-bold text-sky-400 hover:bg-zinc-700 active:scale-95 transition-all">Coller</button>
+                        </div>
+                        ${isEditMode ? `<button onclick="event.stopPropagation(); deleteSatellite('${sat.id}')" class="absolute top-4 right-2 bg-red-600/80 text-white rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold z-30 active:scale-90 transition-all">✕</button>` : ''}
+                    </div>
+                    <div class="preview-zone w-full bg-zinc-950/60 rounded-lg p-0 font-mono text-[10px] text-zinc-400 border border-transparent transition-all">
+                        <pre class="p-2 select-text whitespace-pre-wrap">${hasCode ? escapeHtml(sat.code) : '// Aucun code injecté dans ce module.'}</pre>
+                    </div>
+                `;
+                
+                if (isEditMode) {
+                    const actionContainer = el.querySelector('.flex');
+                    if (actionContainer) actionContainer.classList.add('mr-6');
+                }
+
+                if (!isEditMode) {
+                    el.addEventListener('dragstart', () => el.classList.add('dragging'));
+                    el.addEventListener('dragend', () => {
+                        el.classList.remove('dragging');
+                        updateSatellitesOrder();
+                    });
+                }
+                
+                column.appendChild(el);
+            });
+
+            if (isEditMode) {
+                const addBtn = document.createElement('button');
+                addBtn.className = "border-2 border-dashed border-zinc-700 hover:border-zinc-500 rounded-xl flex items-center justify-center py-3 text-zinc-500 hover:text-zinc-300 transition-all active:scale-[0.99] text-xl w-full";
+                addBtn.textContent = "＋";
+                addBtn.onclick = () => { 
+                    editingSatelliteId = null;
+                    if (modalMainTitle) modalMainTitle.textContent = "Nouveau Satellite";
+                    if (satTitleInput) satTitleInput.value = '';
+                    if (satCodeTxtarea) satCodeTxtarea.value = '';
+                    if (modal) modal.classList.remove('hidden'); 
+                };
+                column.appendChild(addBtn);
+            }
+        }
+
+        window.togglePreview = (element) => {
+            const container = element.closest('.satellite-row');
+            const preview = container.querySelector('.preview-zone');
+            if(preview.classList.contains('open')) {
+                preview.classList.remove('open');
+                preview.style.border = '1px solid transparent';
+            } else {
+                preview.classList.add('open');
+                preview.style.border = '1px solid #2a2e3d';
+            }
+        };
+
+        function escapeHtml(text) {
+            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+
+        window.openEditModal = (id) => {
+            const sat = satellites.find(s => s.id === id);
+            if (!sat) return;
+            
+            editingSatelliteId = id;
+            if (modalMainTitle) modalMainTitle.textContent = "Modifier le Satellite";
+            if (satTitleInput) satTitleInput.value = sat.title;
+            if (satCodeTxtarea) satCodeTxtarea.value = sat.code;
+            if (modal) modal.classList.remove('hidden');
+        };
+
+        if (column) {
+            column.addEventListener('dragover', e => {
+                if (isEditMode) return;
+                e.preventDefault();
+                const draggingElement = document.querySelector('.dragging');
+                if (!draggingElement) return;
+                const afterElement = getDragAfterElement(column, e.clientY);
+                if (afterElement == null) {
+                    column.appendChild(draggingElement);
+                } else {
+                    column.insertBefore(draggingElement, afterElement);
+                }
+            });
+        }
+
+        function getDragAfterElement(container, y) {
+            const draggableElements = [...container.querySelectorAll('.satellite-row:not(.dragging)')];
+            return draggableElements.reduce((closest, child) => {
+                const box = child.getBoundingClientRect();
+                const offset = y - box.top - box.height / 2;
+                if (offset < 0 && offset > closest.offset) {
+                    return { offset: offset, element: child };
+                } else {
+                    return closest;
+                }
+            }, { offset: Number.NEGATIVE_INFINITY }).element;
+        }
+
+        function updateSatellitesOrder() {
+            const currentRows = [...column.querySelectorAll('.satellite-row')];
+            const newOrder = currentRows.map(row => {
+                const id = row.getAttribute('data-id');
+                return satellites.find(s => s.id === id);
+            }).filter(Boolean);
+            
+            satellites = newOrder;
+            save(true);
+        }
+
+        if (toggleEditBtn) {
+            toggleEditBtn.onclick = () => {
+                isEditMode = !isEditMode;
+                if (isEditMode) {
+                    toggleEditBtn.textContent = "Édition ON";
+                    toggleEditBtn.className = "px-4 py-2 rounded-full font-medium text-xs tracking-wider uppercase transition-all bg-red-500/20 text-red-400 border border-red-500/40 neon-border-active";
+                } else {
+                    toggleEditBtn.textContent = "Édition OFF";
+                    toggleEditBtn.className = "px-4 py-2 rounded-full font-medium text-xs tracking-wider uppercase transition-all bg-zinc-800 text-zinc-400 border border-zinc-700";
+                }
+                render();
+            };
+        }
+
+        if (closeModalBtn) {
+            closeModalBtn.onclick = () => {
+                if (modal) modal.classList.add('hidden');
+                if (satTitleInput) satTitleInput.value = '';
+                if (satCodeTxtarea) satCodeTxtarea.value = '';
+                editingSatelliteId = null;
+            };
+        }
+
+        if (submitModalBtn) {
+            submitModalBtn.onclick = () => {
+                const title = satTitleInput ? satTitleInput.value.trim() : '';
+                const code = satCodeTxtarea ? satCodeTxtarea.value : '';
+                if (!title) return;
+
+                if (editingSatelliteId) {
+                    satellites = satellites.map(s => s.id === editingSatelliteId ? { ...s, title, code } : s);
+                    showNotification("Satellite modifié !");
+                } else {
+                    satellites.push({ id: Date.now().toString(), title, code });
+                    showNotification("Satellite ajouté !");
+                }
+
+                save(true);
+                render();
+                if (closeModalBtn) closeModalBtn.onclick();
+            };
+        }
+
+        window.copySatellite = (id) => {
+            const sat = satellites.find(s => s.id === id);
+            if (!sat) return;
+            
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(sat.code)
+                    .then(() => showNotification("Code brut copié !"))
+                    .catch(() => showNotification("Erreur de copie", true));
+            } else {
+                showNotification("Clipboard non supporté", true);
+            }
+        };
+
+        window.pasteSatellite = async (id) => {
+            if (!navigator.clipboard || !navigator.clipboard.readText) {
+                showNotification("Accès au presse-papiers restreint", true);
+                return;
+            }
+            try {
+                const text = await navigator.clipboard.readText();
+                satellites = satellites.map(s => s.id === id ? { ...s, code: text } : s);
+                save(true);
+                render();
+                showNotification("Code mis à jour !");
+            } catch(e) {
+                showNotification("Autorisation refusée", true);
+            }
+        };
+
+        window.deleteSatellite = (id) => {
+            if (confirm("Supprimer ce satellite ?")) {
+                satellites = satellites.filter(s => s.id !== id);
+                save(true);
+                render();
+            }
+        };
+
+        if (closePreviewBtn) {
+            closePreviewBtn.onclick = () => {
+                if (previewPanel) previewPanel.classList.add('hidden');
+                if (previewFrame) previewFrame.src = "about:blank";
+            };
+        }
+
+        updateProjectSelect();
+        render();
+    </script>
+</body>
+</html>
